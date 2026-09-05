@@ -36,16 +36,21 @@ function ExamTaking({ examData, isInstantFeedback, backToList, fetchHistory, ope
       user_ans: answers[q.id]
     }));
 
-    try {
-      await api.post(`/exams/${examData.id}/history`, {
-        score: scoreCount,
-        total: examData.questions.length,
-        wrong_details: wrongDetails
-      });
-      fetchHistory(); 
-    } catch (error) {
-      toast.error("Lỗi lưu kết quả làm bài lên máy chủ");
-    }
+    // LƯU LỊCH SỬ VÀO LOCALSTORAGE ĐỂ TÁCH BIỆT THEO TÊN MIỀN
+    const newRecord = {
+      id: Date.now(),
+      examId: examData.id,
+      title: examData.title,
+      score: scoreCount,
+      total: examData.questions.length,
+      date: new Date().toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }),
+      wrongDetails: wrongDetails
+    };
+
+    const currentHistory = JSON.parse(localStorage.getItem('scofieldExamHistory') || '[]');
+    localStorage.setItem('scofieldExamHistory', JSON.stringify([newRecord, ...currentHistory]));
+    
+    fetchHistory(); 
   };
 
   const handleCreateFromCurrentMistakes = async () => {
@@ -78,19 +83,7 @@ function ExamTaking({ examData, isInstantFeedback, backToList, fetchHistory, ope
       
       <div className="row">
         <div className="col-lg-8 mb-4">
-          <h3 className="mb-3">{examData.title}</h3>
-          
-          {!isSubmitted && (
-            <div className="mb-4">
-              <div className="d-flex justify-content-between text-muted fw-bold mb-2" style={{ fontSize: '0.9rem' }}>
-                <span>Tiến độ làm bài: {answeredCount} / {totalQuestions} câu</span>
-                <span>{Math.round((answeredCount / totalQuestions) * 100)}%</span>
-              </div>
-              <div className="progress shadow-sm" style={{ height: '8px' }}>
-                <div className="progress-bar bg-primary" role="progressbar" style={{ width: `${(answeredCount / totalQuestions) * 100}%` }}></div>
-              </div>
-            </div>
-          )}
+          <h3 className="mb-4">{examData.title}</h3>
 
           {examData.questions.map((q, idx) => {
             const userAns = answers[q.id];
@@ -167,11 +160,24 @@ function ExamTaking({ examData, isInstantFeedback, backToList, fetchHistory, ope
             </div>
           )}
         </div>
+
         <div className="col-lg-4 d-print-none">
           <div className="card shadow-sm border-0 sticky-top" style={{ top: '20px', zIndex: 1000 }}>
             <div className="card-body">
-              <h5 className="mb-3 text-center">Bảng điều hướng</h5>
-              {!isSubmitted && <p className="text-center text-muted small">Đã làm: <strong>{answeredCount} / {totalQuestions}</strong></p>}
+              <h5 className="mb-4 text-center">Bảng điều hướng</h5>
+              
+              {!isSubmitted && (
+                <div className="mb-4">
+                  <div className="d-flex justify-content-between text-muted fw-bold mb-2" style={{ fontSize: '0.9rem' }}>
+                    <span>Đã làm: {answeredCount} / {totalQuestions} câu</span>
+                    <span>{Math.round((answeredCount / totalQuestions) * 100)}%</span>
+                  </div>
+                  <div className="progress shadow-sm" style={{ height: '8px' }}>
+                    <div className="progress-bar bg-primary" role="progressbar" style={{ width: `${(answeredCount / totalQuestions) * 100}%` }}></div>
+                  </div>
+                </div>
+              )}
+
               <div className="d-flex flex-wrap gap-2 justify-content-center" style={{ maxHeight: '65vh', overflowY: 'auto', paddingRight: '5px' }}>
                 {examData.questions.map((q, idx) => {
                   const userAns = answers[q.id];

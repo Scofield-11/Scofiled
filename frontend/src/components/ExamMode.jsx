@@ -29,13 +29,10 @@ function ExamMode() {
   const [importText, setImportText] = useState("");
   const [isLoading, setIsLoading] = useState(true);
 
-  const fetchHistory = async () => {
-    try {
-      const res = await api.get("/exams/history/all");
-      setHistory(res.data);
-    } catch (error) {
-      console.error("Lỗi lấy lịch sử:", error);
-    }
+  // ĐỌC LỊCH SỬ TỪ LOCAL STORAGE THEO TÊN MIỀN
+  const fetchHistory = () => {
+    const historyData = JSON.parse(localStorage.getItem('scofieldExamHistory') || '[]');
+    setHistory(historyData);
   };
 
   const fetchExamsList = async () => {
@@ -48,8 +45,17 @@ function ExamMode() {
   };
 
   useEffect(() => {
-    Promise.all([fetchExamsList(), fetchHistory()]).finally(() => setIsLoading(false));
+    fetchExamsList().finally(() => setIsLoading(false));
+    fetchHistory();
   }, []);
+
+  const handleClearHistory = () => {
+    if (window.confirm("Bạn có chắc chắn muốn xóa toàn bộ lịch sử làm bài trên tên miền này?")) {
+      localStorage.removeItem('scofieldExamHistory');
+      setHistory([]);
+      toast.success("Đã xóa lịch sử thành công!");
+    }
+  };
 
   const handleEditClick = async (examId) => {
     try {
@@ -141,7 +147,6 @@ function ExamMode() {
     try {
       await api.delete(`/exams/${examId}`);
       fetchExamsList();
-      fetchHistory(); 
     } catch (error) {
       toast.error("Lỗi khi xóa bài thi");
     }
@@ -158,7 +163,7 @@ function ExamMode() {
 
   const backToList = () => {
     setExamData(null);
-    fetchExamsList(); // Refresh list when going back
+    fetchExamsList(); 
   };
 
   const openSaveModal = (q) => {
@@ -221,11 +226,11 @@ function ExamMode() {
 
   if (viewHistory) {
     return (
-      <div className="container mt-4" style={{ maxWidth: '800px' }}>
+      <div className="container mt-4 fade-in-slide" style={{ maxWidth: '900px' }}>
         <ExamSaveModal show={showSaveModal} onClose={closeSaveModal} newSaveTitle={newSaveTitle} setNewSaveTitle={setNewSaveTitle} saveToNew={saveToNew} saveToExisting={saveToExisting} exams={exams} />
-        <button className="btn btn-secondary mb-4" onClick={() => setViewHistory(null)}>← Quay lại danh sách</button>
-        <div className="alert alert-info shadow-sm border-0 mb-4">
-          <h4 className="fw-bold">{viewHistory.title}</h4>
+        <button className="btn btn-outline-secondary fw-bold rounded-pill mb-4 px-4 shadow-sm" onClick={() => setViewHistory(null)}>← Quay lại danh sách</button>
+        <div className="alert alert-info shadow-sm border-0 mb-4 rounded-4 p-4">
+          <h4 className="fw-bold mb-3 text-primary">{viewHistory.title}</h4>
           <p className="mb-0 text-dark">
             Ngày làm: <strong>{viewHistory.date}</strong> <br/>
             Kết quả: <strong className="text-primary fs-5">{viewHistory.score} / {viewHistory.total}</strong>
@@ -233,27 +238,27 @@ function ExamMode() {
         </div>
         
         {viewHistory.wrongDetails && viewHistory.wrongDetails.length === 0 ? (
-          <div className="alert alert-success fw-bold">Tuyệt vời! Bạn không làm sai câu nào trong phiên này.</div>
+          <div className="alert alert-success fw-bold p-4 rounded-4 shadow-sm border-0">Tuyệt vời! Bạn không làm sai câu nào trong phiên này.</div>
         ) : (
           <div>
-            <h5 className="text-danger fw-bold mb-3">Các câu làm sai:</h5>
+            <h5 className="text-danger fw-bold mb-4">Các câu làm sai:</h5>
             {viewHistory.wrongDetails && viewHistory.wrongDetails.map((q, i) => (
-              <div key={i} className="bg-white rounded shadow-sm mb-4 p-4" style={{ transform: 'none' }}>
-                <div className="d-flex justify-content-between align-items-start mb-3">
-                  <h5 className="mb-0 text-dark">Câu hỏi: {q.question}</h5>
+              <div key={i} className="bg-white rounded-4 shadow-sm mb-4 p-4" style={{ transform: 'none' }}>
+                <div className="d-flex justify-content-between align-items-start mb-4">
+                  <h5 className="mb-0 text-dark fw-bold">{q.question}</h5>
                   <button className="btn btn-sm btn-outline-warning fw-bold text-dark ms-3 text-nowrap" onClick={() => openSaveModal(q)} title="Lưu câu hỏi này">
                     ⭐ Lưu
                   </button>
                 </div>
-                <div className="row">
+                <div className="row g-2">
                   {q.options ? q.options.map((opt, oIdx) => {
                     const optNumber = oIdx + 1;
                     let btnClass = "btn-outline-secondary";
                     if (optNumber === q.correct_ans) btnClass = "btn-success text-white border-success"; 
                     else if (q.user_ans === optNumber) btnClass = "btn-danger text-white border-danger";
                     return (
-                      <div className="col-sm-6 mb-3" key={oIdx}>
-                        <button className={`btn w-100 text-start py-2 ${btnClass}`} style={{ cursor: 'default' }}>{opt}</button>
+                      <div className="col-sm-6" key={oIdx}>
+                        <button className={`btn w-100 text-start py-2 fw-bold ${btnClass}`} style={{ cursor: 'default', borderRadius: '10px' }}>{opt}</button>
                       </div>
                     );
                   }) : (
@@ -303,7 +308,7 @@ function ExamMode() {
         />
       )}
 
-      <ExamHistoryTable history={history} setViewHistory={setViewHistory} />
+      <ExamHistoryTable history={history} setViewHistory={setViewHistory} handleClearHistory={handleClearHistory} />
     </div>
   );
 }

@@ -1,11 +1,14 @@
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap');
+
 body {
   background-color: #f6f7fb !important; 
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: 'Nunito', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif !important;
   margin: 0;
   padding: 0;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
 
 :root {
   --bs-primary: #863bff;
@@ -331,3 +334,5 @@ body {
 
 .hover-bg-danger:hover { background-color: #dc3545 !important; }
 .hover-text-white:hover { color: #ffffff !important; }
+
+

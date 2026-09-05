@@ -1,6 +1,7 @@
 import React, { useState, useContext, useEffect } from 'react';
 import api from '../api/axiosConfig';
 import AddVocabularyForm from './AddVocabularyForm';
+import SaveNoteModal from './SaveNoteModal';
 import { VocabContext } from '../context/VocabContext';
 import { toast } from 'react-toastify';
 import LoadingSkeleton from './LoadingSkeleton';
@@ -14,12 +15,10 @@ function VocabularyList() {
   const [currentPath, setCurrentPath] = useState(""); 
   const [customFolders, setCustomFolders] = useState([]); 
 
-  // Trạng thái cho tính năng Kéo thả (Drag & Drop)
   const [draggedSetId, setDraggedSetId] = useState(null);
   const [dragOverSetId, setDragOverSetId] = useState(null);
   const [customOrder, setCustomOrder] = useState(() => JSON.parse(localStorage.getItem('scofieldSetOrder')) || []);
 
-  // Trạng thái cho bộ lọc (Lưu lại trạng thái lọc của người dùng vào bộ nhớ)
   const [sortOption, setSortOption] = useState(() => {
     const saved = localStorage.getItem('scofieldSortOption');
     if (saved) return saved;
@@ -31,7 +30,7 @@ function VocabularyList() {
   useEffect(() => { localStorage.setItem('scofieldSortOption', sortOption); }, [sortOption]);
   
   const [searchTerm, setSearchTerm] = useState('');
-  const [showOnlyStarred, setShowOnlyStarred] = useState(false);
+  const [noteModalVocab, setNoteModalVocab] = useState(null); // State mở Note Modal
 
   const highlightText = (text, highlight) => {
     if (!highlight || !text) return text;
@@ -56,9 +55,7 @@ function VocabularyList() {
 
   if (isSearching) {
     displaySets = sets.map(set => {
-      let filteredVocabs = set.vocabularies;
-      if (showOnlyStarred) filteredVocabs = filteredVocabs.filter(v => v.is_starred);
-      filteredVocabs = filteredVocabs.filter(v => 
+      let filteredVocabs = set.vocabularies.filter(v => 
         v.word.toLowerCase().includes(searchTerm.toLowerCase()) || 
         v.meaning.toLowerCase().includes(searchTerm.toLowerCase())
       );
@@ -79,10 +76,6 @@ function VocabularyList() {
     };
 
     sets.forEach(set => {
-      let isMatch = true;
-      if (showOnlyStarred && !set.vocabularies.some(v => v.is_starred)) isMatch = false;
-      if (!isMatch) return;
-
       const path = (set.folder_path || "").trim();
       if (path === currentPath) currentLevelSets.push(set); 
       checkPathForFolders(path);
@@ -95,7 +88,6 @@ function VocabularyList() {
       .filter(set => !set.title.startsWith('_Thư mục:')) 
       .map(set => {
         let filteredVocabs = [...set.vocabularies];
-        if (showOnlyStarred) filteredVocabs = filteredVocabs.filter(v => v.is_starred);
         
         if (sortOption === 'az') filteredVocabs.sort((a, b) => a.word.localeCompare(b.word));
         else if (sortOption === 'za') filteredVocabs.sort((a, b) => b.word.localeCompare(a.word));
@@ -106,7 +98,6 @@ function VocabularyList() {
       });
   }
 
-  // Sắp xếp thứ tự học phần theo tùy chọn hiện tại
   displaySets.sort((a, b) => {
     if (sortOption === 'custom') {
       const indexA = customOrder.indexOf(a.id);
@@ -116,13 +107,13 @@ function VocabularyList() {
       if (indexB !== -1) return 1;
       return b.id - a.id; 
     } else if (sortOption === 'oldest') {
-      return a.id - b.id; // Chiều 26, 27, 28, 29
+      return a.id - b.id; 
     } else if (sortOption === 'az') {
       return a.title.localeCompare(b.title);
     } else if (sortOption === 'za') {
       return b.title.localeCompare(a.title);
     } else {
-      return b.id - a.id; // Mới nhất: 29, 28, 27, 26
+      return b.id - a.id; 
     }
   });
 
@@ -157,12 +148,8 @@ function VocabularyList() {
           setCustomFolders([...customFolders, fullPath]);
           toast.success(`Đã tạo thư mục: ${folderName}`);
           fetchSets(false, true); 
-        } catch (error) {
-          toast.error("Lỗi khi tạo thư mục!");
-        }
-      } else {
-        toast.warning("Thư mục này đã tồn tại!");
-      }
+        } catch (error) { toast.error("Lỗi khi tạo thư mục!"); }
+      } else { toast.warning("Thư mục này đã tồn tại!"); }
     }
   };
 
@@ -170,16 +157,14 @@ function VocabularyList() {
     e.stopPropagation(); 
     const targetPath = currentPath ? `${currentPath}/${folderName}` : folderName;
 
-    if (window.confirm(`Xóa thư mục "${folderName}" sẽ xóa TOÀN BỘ các học phần nằm bên trong. Bạn chắc chắn chứ?`)) {
+    if (window.confirm(`Xóa thư mục "${folderName}" sẽ xóa TOÀN BỘ các học phần bên trong. Chắc chắn chứ?`)) {
       try {
         const setsToDelete = sets.filter(s => s.folder_path === targetPath || (s.folder_path && s.folder_path.startsWith(targetPath + '/')));
         await Promise.all(setsToDelete.map(s => api.delete(`/sets/${s.id}`)));
         setCustomFolders(prev => prev.filter(p => p !== targetPath && !p.startsWith(targetPath + '/')));
         toast.success(`Đã xóa thư mục: ${folderName}`);
         fetchSets(false, true);
-      } catch (error) {
-        toast.error("Có lỗi xảy ra khi xóa thư mục!");
-      }
+      } catch (error) { toast.error("Có lỗi xảy ra khi xóa thư mục!"); }
     }
   };
 
@@ -225,13 +210,6 @@ function VocabularyList() {
     } catch (error) { toast.error("Lỗi thêm từ vựng!"); }
   };
 
-  const handleToggleStarList = async (e, vocab) => {
-    e.stopPropagation();
-    try { await api.put(`/vocabularies/${vocab.id}/star`, { is_starred: !vocab.is_starred }); fetchSets(false, true); } 
-    catch (error) { toast.error("Lỗi cập nhật sao"); }
-  };
-
-  // --- Nâng cấp hàm xử lý Kéo và Thả (Dùng e.dataTransfer chống rớt data) ---
   const handleDragStart = (e, id) => {
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', id.toString());
@@ -257,19 +235,11 @@ function VocabularyList() {
   const handleDrop = (e, targetId) => {
     e.preventDefault();
     setDragOverSetId(null);
-    
-    // Lấy data ID trực tiếp từ Event Browser để đảm bảo không bị thất thoát
     const draggedIdStr = e.dataTransfer.getData('text/plain');
-    if (!draggedIdStr) {
-      setDraggedSetId(null);
-      return;
-    }
+    if (!draggedIdStr) { setDraggedSetId(null); return; }
     
     const draggedId = parseInt(draggedIdStr, 10);
-    if (draggedId === targetId) {
-      setDraggedSetId(null);
-      return;
-    }
+    if (draggedId === targetId) { setDraggedSetId(null); return; }
 
     const currentIds = displaySets.map(s => s.id);
     const draggedIdx = currentIds.indexOf(draggedId);
@@ -279,20 +249,15 @@ function VocabularyList() {
       const newOrderedIds = [...currentIds];
       newOrderedIds.splice(draggedIdx, 1);
       newOrderedIds.splice(targetIdx, 0, draggedId);
-
       const mergedOrder = [...new Set([...newOrderedIds, ...customOrder])];
       setCustomOrder(mergedOrder);
       localStorage.setItem('scofieldSetOrder', JSON.stringify(mergedOrder));
-      setSortOption('custom'); // Tự động khóa về chế độ "Tùy chỉnh" khi người dùng kéo thả
+      setSortOption('custom'); 
     }
-    
     setDraggedSetId(null);
   };
 
-  const handleDragEnd = () => {
-    setDraggedSetId(null);
-    setDragOverSetId(null);
-  };
+  const handleDragEnd = () => { setDraggedSetId(null); setDragOverSetId(null); };
 
   if (loading) return <LoadingSkeleton />;
 
@@ -304,6 +269,15 @@ function VocabularyList() {
         existingFolders={allExistingFolders} 
         currentPath={currentPath} 
       />
+
+      {noteModalVocab && (
+        <SaveNoteModal 
+          vocab={noteModalVocab} 
+          sets={sets} 
+          onClose={() => setNoteModalVocab(null)} 
+          onSaveSuccess={() => fetchSets(false, true)} 
+        />
+      )}
 
       {/* THANH TÌM KIẾM & LỌC */}
       <div className="d-flex flex-column flex-lg-row gap-3 mb-4 fade-in-slide align-items-lg-center">
@@ -329,12 +303,6 @@ function VocabularyList() {
             <option value="az">A - Z</option>
             <option value="za">Z - A</option>
           </select>
-          <button 
-            className={`btn btn-lg fw-bold rounded-pill shadow-sm text-nowrap px-4 ${showOnlyStarred ? 'btn-warning text-white' : 'btn-white bg-white text-muted border-0'}`}
-            onClick={() => setShowOnlyStarred(!showOnlyStarred)} style={{ height: '54px' }}
-          >
-            {showOnlyStarred ? '⭐ Lọc từ khó' : '☆ Lọc từ gắn sao'}
-          </button>
           <div className="d-none d-md-flex align-items-center bg-white p-1 shadow-sm border" style={{ height: '54px', borderRadius: '50px' }}>
             <button 
               className={`border-0 h-100 d-flex align-items-center justify-content-center transition-all ${viewMode === 'list' ? 'bg-primary text-white shadow-sm' : 'bg-transparent text-muted'}`} 
@@ -394,9 +362,7 @@ function VocabularyList() {
                 <div className="card-body d-flex align-items-center justify-content-between p-3">
                   <div className="d-flex align-items-center gap-2 overflow-hidden flex-grow-1" style={{ minWidth: 0 }}>
                     <span className="fs-3">📁</span>
-                    <h6 className="fw-bold mb-0 text-dark text-truncate" title={folderName}>
-                      {folderName}
-                    </h6>
+                    <h6 className="fw-bold mb-0 text-dark text-truncate" title={folderName}>{folderName}</h6>
                   </div>
                   
                   <button 
@@ -516,10 +482,11 @@ function VocabularyList() {
                             <div className="row align-items-center">
                               <div className="col-sm-5 border-end border-2 border-light d-flex align-items-center gap-3">
                                 <button 
-                                  className="btn btn-light rounded-circle border-0 d-flex align-items-center justify-content-center p-0 shadow-sm"
-                                  style={{ width: '40px', height: '40px', color: vocab.is_starred ? '#ffc107' : '#dee2e6', fontSize: '1.4rem' }}
-                                  onClick={(e) => handleToggleStarList(e, vocab)}
-                                >★</button>
+                                  className="btn btn-light rounded-circle border-0 d-flex align-items-center justify-content-center p-0 shadow-sm hover-scale transition-all"
+                                  style={{ width: '40px', height: '40px', color: '#8a2be2', fontSize: '1.2rem' }}
+                                  onClick={(e) => { e.stopPropagation(); setNoteModalVocab(vocab); }}
+                                  title="Lưu vào Note"
+                                >📓</button>
                                 <div className="ms-1 text-truncate">
                                   {vocab.furigana && <div className="text-muted fw-bold mb-1" style={{ fontSize: '0.9rem' }}>{vocab.furigana}</div>}
                                   <div className="fw-bold fs-5 text-dark">{highlightText(vocab.word, searchTerm)}</div>
@@ -530,6 +497,7 @@ function VocabularyList() {
                               </div>
                               <div className="col-sm-2 text-end">
                                 <button className="btn btn-sm btn-light text-primary fw-bold px-3 py-2 me-2" onClick={() => handleEditClick(vocab)}>✏️ Sửa</button>
+                                <button className="btn btn-sm btn-light text-danger fw-bold px-2 py-2" onClick={() => handleDeleteVocab(vocab.id)}>🗑️</button>
                               </div>
                             </div>
                           )}
@@ -565,7 +533,6 @@ function VocabularyList() {
                           </button>
                         </div>
                       )}
-
                     </div>
                   </div>
                 )}

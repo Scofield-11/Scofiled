@@ -9,6 +9,8 @@ function MatchMode() {
   const [selectedSetId, setSelectedSetId] = useState('all');
   const [difficulty, setDifficulty] = useState(6); 
   const [gameMode, setGameMode] = useState('normal'); 
+  const [pairType, setPairType] = useState('word_meaning'); // Đổi tên biến cho thống nhất
+  
   const [score, setScore] = useState(0);
   const [combo, setCombo] = useState(0);
   const [lastMatchTime, setLastMatchTime] = useState(null);
@@ -21,9 +23,9 @@ function MatchMode() {
   useEffect(() => { fetchSets(); fetchAllVocabs(); }, [fetchSets, fetchAllVocabs]);
 
   useEffect(() => {
-    setBestTime(localStorage.getItem(`matchBest_${selectedSetId}_${difficulty}`) || null);
-    setHighScore(localStorage.getItem(`matchScore_${selectedSetId}`) || null);
-  }, [selectedSetId, difficulty]);
+    setBestTime(localStorage.getItem(`matchBest_${selectedSetId}_${difficulty}_${pairType}`) || null);
+    setHighScore(localStorage.getItem(`matchScore_${selectedSetId}_${pairType}`) || null);
+  }, [selectedSetId, difficulty, pairType]);
   
   const [isStarted, setIsStarted] = useState(false);
   const [cards, setCards] = useState([]);
@@ -70,7 +72,7 @@ function MatchMode() {
         setIsFinished(true);
         confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
         vibrate([100, 50, 100, 50, 200]);
-        const key = `matchBest_${selectedSetId}_${cards.length / 2}`;
+        const key = `matchBest_${selectedSetId}_${cards.length / 2}_${pairType}`;
         if (!bestTime || timeElapsed < bestTime) {
           localStorage.setItem(key, timeElapsed);
           setBestTime(timeElapsed);
@@ -78,22 +80,36 @@ function MatchMode() {
         }
       }
     }
-  }, [matchedIds, cards, gameMode, timeElapsed, bestTime, selectedSetId]);
+  }, [matchedIds, cards, gameMode, timeElapsed, bestTime, selectedSetId, pairType]);
 
   useEffect(() => {
     if (isFinished && gameMode === 'challenge') {
       confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
       vibrate([100, 50, 100, 50, 200]);
       if (!highScore || score > highScore) {
-        localStorage.setItem(`matchScore_${selectedSetId}`, score);
+        localStorage.setItem(`matchScore_${selectedSetId}_${pairType}`, score);
         setHighScore(score);
         toast.success(`🏆 Điểm cao mới: ${score} điểm!`);
       }
     }
-  }, [isFinished, gameMode, score, highScore, selectedSetId]);
+  }, [isFinished, gameMode, score, highScore, selectedSetId, pairType]);
+
+  const getCardTexts = (vocab) => {
+    if (pairType === 'word_meaning') return [vocab.word, vocab.meaning];
+    if (pairType === 'word_furigana') return [vocab.word, vocab.furigana || vocab.word];
+    if (pairType === 'furigana_meaning') return [vocab.furigana || vocab.word, vocab.meaning];
+    return [vocab.word, vocab.meaning];
+  };
 
   const generateCards = () => {
-    let pool = selectedSetId === 'all' ? allVocabs : (sets.find(s => s.id === parseInt(selectedSetId))?.vocabularies || []);
+    let pool = [];
+    if (selectedSetId === 'all') {
+      const validSets = sets.filter(s => !s.title.startsWith('_Thư mục:'));
+      pool = validSets.flatMap(s => s.vocabularies);
+    } else {
+      pool = sets.find(s => s.id === parseInt(selectedSetId))?.vocabularies || [];
+    }
+
     const actualDifficulty = Math.min(difficulty, pool.length);
     const pivotIndex = Math.floor(Math.random() * pool.length);
     const pivotWord = pool[pivotIndex] || pool[0];
@@ -106,8 +122,9 @@ function MatchMode() {
     
     const initialCards = [];
     scoredPool.slice(0, actualDifficulty).forEach(vocab => {
-      initialCards.push({ id: `word-${vocab.id}-${Date.now()}`, matchId: vocab.id, text: vocab.word });
-      initialCards.push({ id: `mean-${vocab.id}-${Date.now()}`, matchId: vocab.id, text: vocab.meaning });
+      const [text1, text2] = getCardTexts(vocab);
+      initialCards.push({ id: `cardA-${vocab.id}-${Date.now()}`, matchId: vocab.id, text: text1 });
+      initialCards.push({ id: `cardB-${vocab.id}-${Date.now()}`, matchId: vocab.id, text: text2 });
     });
     setCards(initialCards.sort(() => 0.5 - Math.random()));
     setMatchedIds([]);
@@ -131,7 +148,7 @@ function MatchMode() {
 
   const handleCardClick = (card) => {
     if (isAnimating || matchedIds.includes(card.matchId) || selectedCards.length === 2 || selectedCards.find(c => c.id === card.id)) return;
-    vibrate(20); // Chạm thẻ rung nhẹ
+    vibrate(20);
 
     const newSelected = [...selectedCards, card];
     setSelectedCards(newSelected);
@@ -139,7 +156,7 @@ function MatchMode() {
     if (newSelected.length === 2) {
       setIsAnimating(true); 
       if (newSelected[0].matchId === newSelected[1].matchId) {
-        vibrate(50); // Rung thành công
+        vibrate(50);
         const now = Date.now();
         let newCombo = 1;
         if (lastMatchTime && (now - lastMatchTime < 2500)) newCombo = combo + 1; 
@@ -154,7 +171,7 @@ function MatchMode() {
           setIsAnimating(false); 
         }, 300);
       } else {
-        vibrate([100, 50, 100]); // Rung cảnh báo sai
+        vibrate([100, 50, 100]);
         setCombo(0); 
         setErrorCards([newSelected[0].id, newSelected[1].id]);
         setTimeout(() => {
@@ -199,12 +216,24 @@ function MatchMode() {
               ))}
             </select>
           </div>
+
+          <div className="mb-3">
+            <label className="form-label fw-bold text-muted">Cặp thẻ muốn ghép:</label>
+            <select className="form-select form-select-lg bg-light border-0 fw-bold text-primary" value={pairType} onChange={(e) => setPairType(e.target.value)}>
+              <option value="word_meaning">Từ vựng (Kanji) ↔ Ý nghĩa</option>
+              <option value="word_furigana">Từ vựng (Kanji) ↔ Phiên âm (Hiragana)</option>
+              <option value="furigana_meaning">Phiên âm (Hiragana) ↔ Ý nghĩa</option>
+            </select>
+          </div>
+
           <div className="mb-4">
             <label className="form-label fw-bold text-muted">Độ khó (Số cặp thẻ):</label>
             <input type="number" className="form-control bg-light border-0 fw-bold text-center text-dark" value={difficulty} min={2} onChange={(e) => setDifficulty(parseInt(e.target.value) || 2)} />
           </div>
+
           {gameMode === 'normal' && bestTime !== null && <div className="alert alert-info text-center fw-bold shadow-sm border-0 mb-4 rounded-3">🏆 Kỷ lục tốc độ: {bestTime} giây</div>}
           {gameMode === 'challenge' && highScore !== null && <div className="alert alert-warning text-center fw-bold shadow-sm border-0 mb-4 rounded-3">🏆 Điểm cao nhất: {highScore} điểm</div>}
+          
           <button className={`btn btn-lg w-100 fw-bold shadow-sm ${gameMode === 'challenge' ? 'btn-danger' : 'btn-primary'}`} onClick={startGame}>Bắt đầu chơi</button>
         </div>
       </div>
@@ -225,7 +254,7 @@ function MatchMode() {
             <span className={gameMode === 'challenge' && timeElapsed <= 10 ? 'text-danger shake d-inline-block' : 'text-primary'}>{timeElapsed}s</span>
           </h4>
           
-          <button className="btn btn-outline-secondary fw-bold" onClick={() => setIsStarted(false)}>Thoát</button>
+          <button className="btn btn-outline-secondary fw-bold shadow-sm" onClick={() => setIsStarted(false)}>Thoát</button>
         </div>
 
         {gameMode === 'challenge' && (
@@ -239,7 +268,6 @@ function MatchMode() {
                   <span className="badge rounded-pill bg-danger fs-5 px-3 py-2 fade-in shadow-sm streak-glow">
                     Combo x{combo} 🔥
                   </span>
-                  {/* Thanh thời gian đếm ngược 2.5s để giữ Combo */}
                   <div className="position-absolute top-100 start-50 translate-middle-x mt-2 w-100 overflow-hidden rounded-pill" style={{ height: '6px', backgroundColor: 'rgba(220,53,69,0.2)' }}>
                     <div key={combo} className="bg-danger h-100 combo-timer-bar rounded-pill"></div>
                   </div>
