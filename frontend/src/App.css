@@ -328,3 +328,6 @@ body {
   0% { transform: scaleX(1); }
   100% { transform: scaleX(0); }
 }
+
+.hover-bg-danger:hover { background-color: #dc3545 !important; }
+.hover-text-white:hover { color: #ffffff !important; }

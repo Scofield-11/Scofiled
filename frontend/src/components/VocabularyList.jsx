@@ -111,7 +111,6 @@ function VocabularyList() {
   };
 
   // Nút tạo thư mục trên màn hình chính
-  // Nút tạo thư mục trên màn hình chính
   const handleCreateFolder = async () => {
     const newFolder = window.prompt("Nhập tên thư mục con mới:");
     if (newFolder && newFolder.trim()) {
@@ -135,6 +134,29 @@ function VocabularyList() {
         }
       } else {
         toast.warning("Thư mục này đã tồn tại!");
+      }
+    }
+  };
+
+  const handleDeleteFolder = async (e, folderName) => {
+    e.stopPropagation(); // Chặn sự kiện click để không bị mở thư mục
+    const targetPath = currentPath ? `${currentPath}/${folderName}` : folderName;
+
+    if (window.confirm(`Xóa thư mục "${folderName}" sẽ xóa TOÀN BỘ các học phần nằm bên trong. Bạn chắc chắn chứ?`)) {
+      try {
+        // Tìm tất cả các học phần thuộc thư mục này (kể cả thư mục con và thư mục ảo)
+        const setsToDelete = sets.filter(s => s.folder_path === targetPath || (s.folder_path && s.folder_path.startsWith(targetPath + '/')));
+
+        // Xóa toàn bộ học phần đó thông qua API
+        await Promise.all(setsToDelete.map(s => api.delete(`/sets/${s.id}`)));
+
+        // Xóa khỏi danh sách thư mục ảo vừa tạo (nếu có)
+        setCustomFolders(prev => prev.filter(p => p !== targetPath && !p.startsWith(targetPath + '/')));
+
+        toast.success(`Đã xóa thư mục: ${folderName}`);
+        fetchSets(false, true); // Refresh dữ liệu
+      } catch (error) {
+        toast.error("Có lỗi xảy ra khi xóa thư mục!");
       }
     }
   };
@@ -305,9 +327,28 @@ function VocabularyList() {
                 style={{cursor: 'pointer'}}
                 onClick={() => setCurrentPath(currentPath ? `${currentPath}/${folderName}` : folderName)}
               >
-                <div className="card-body d-flex align-items-center gap-3 p-4">
-                  <span className="fs-2">📁</span>
-                  <h5 className="fw-bold mb-0 text-dark text-truncate w-100">{folderName}</h5>
+                <div className="card-body d-flex align-items-center justify-content-between p-3">
+                  <div className="d-flex align-items-center gap-2 overflow-hidden flex-grow-1" style={{ minWidth: 0 }}>
+                    <span className="fs-3">📁</span>
+                    <h6 className="fw-bold mb-0 text-dark text-truncate" title={folderName}>
+                      {folderName}
+                    </h6>
+                  </div>
+                  
+                  {/* Nút Xóa Thư Mục */}
+                  <button 
+                    className="btn btn-sm btn-light text-danger rounded-circle border-0 d-flex align-items-center justify-content-center shadow-sm ms-2 transition-all hover-bg-danger hover-text-white"
+                    style={{ width: '32px', height: '32px', flexShrink: 0 }}
+                    onClick={(e) => handleDeleteFolder(e, folderName)}
+                    title="Xóa thư mục này"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="3 6 5 6 21 6"></polyline>
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                      <line x1="10" y1="11" x2="10" y2="17"></line>
+                      <line x1="14" y1="11" x2="14" y2="17"></line>
+                    </svg>
+                  </button>
                 </div>
               </div>
             </div>
