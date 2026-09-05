@@ -42,7 +42,8 @@ export const VocabProvider = ({ children }) => {
     if (hasFetchedVocabs && !forceRefresh) return;
     setLoading(true);
     try {
-      const res = await api.get('/vocabularies');
+      // Ép limit lên 100,000 để lấy toàn bộ từ vựng
+      const res = await api.get('/vocabularies?limit=100000'); 
       setAllVocabs(res.data);
       setHasFetchedVocabs(true);
     } catch (error) {
