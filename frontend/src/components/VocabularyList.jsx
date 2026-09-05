@@ -12,7 +12,12 @@ function VocabularyList() {
   const [expandedSetId, setExpandedSetId] = useState(null);
   const [viewMode, setViewMode] = useState('list'); 
   const [currentPath, setCurrentPath] = useState(""); 
-  const [customFolders, setCustomFolders] = useState([]); // Trạng thái chứa thư mục trống vừa tạo
+  const [customFolders, setCustomFolders] = useState([]); 
+
+  // Trạng thái cho tính năng Kéo thả (Drag & Drop)
+  const [draggedSetId, setDraggedSetId] = useState(null);
+  const [dragOverSetId, setDragOverSetId] = useState(null);
+  const [customOrder, setCustomOrder] = useState(() => JSON.parse(localStorage.getItem('scofieldSetOrder')) || []);
 
   React.useEffect(() => { fetchSets(); }, [fetchSets]);
   
@@ -36,7 +41,6 @@ function VocabularyList() {
   let displaySets = [];
   let displayFolders = [];
 
-  // Tổng hợp tất cả các thư mục có trong hệ thống (từ Data thật + Data vừa tạo)
   const allExistingFolders = Array.from(new Set([
     ...sets.map(s => s.folder_path).filter(p => p),
     ...customFolders
@@ -59,7 +63,6 @@ function VocabularyList() {
     const checkPathForFolders = (path) => {
       if (!path) return;
       if (path === currentPath) {
-        // Thư mục hiện tại (Không làm gì cả)
       } else if (path.startsWith(currentPath ? currentPath + '/' : '')) {
         const remainingPath = currentPath ? path.substring(currentPath.length + 1) : path;
         const nextFolder = remainingPath.split('/')[0];
@@ -77,12 +80,11 @@ function VocabularyList() {
       checkPathForFolders(path);
     });
 
-    // Gom cả các thư mục rỗng người dùng vừa tạo vào danh sách hiển thị
     customFolders.forEach(path => checkPathForFolders(path));
-
     displayFolders = Array.from(subfolders);
+    
     displaySets = currentLevelSets
-      .filter(set => !set.title.startsWith('_Thư mục:')) // BỔ SUNG: Ẩn học phần ảo giữ folder
+      .filter(set => !set.title.startsWith('_Thư mục:')) 
       .map(set => {
         let filteredVocabs = set.vocabularies;
         if (showOnlyStarred) filteredVocabs = filteredVocabs.filter(v => v.is_starred);
@@ -94,6 +96,16 @@ function VocabularyList() {
         return { ...set, vocabularies: filteredVocabs, progress: calculateProgress(set.vocabularies) };
       });
   }
+
+  // Sắp xếp thứ tự học phần theo tùy chỉnh Kéo & Thả
+  displaySets.sort((a, b) => {
+    const indexA = customOrder.indexOf(a.id);
+    const indexB = customOrder.indexOf(b.id);
+    if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+    if (indexA !== -1) return -1;
+    if (indexB !== -1) return 1;
+    return b.id - a.id; 
+  });
 
   const [editingVocabId, setEditingVocabId] = useState(null);
   const [editWord, setEditWord] = useState('');
@@ -110,7 +122,6 @@ function VocabularyList() {
     setAddingToSetId(null);
   };
 
-  // Nút tạo thư mục trên màn hình chính
   const handleCreateFolder = async () => {
     const newFolder = window.prompt("Nhập tên thư mục con mới:");
     if (newFolder && newFolder.trim()) {
@@ -119,16 +130,14 @@ function VocabularyList() {
       
       if (!customFolders.includes(fullPath) && !allExistingFolders.includes(fullPath)) {
         try {
-          // Gọi API để tạo một Học phần ảo (rỗng) nhằm lưu folder_path vào Database
           await api.post("/vocabularies/bulk-import", {
-            title: `_Thư mục: ${folderName}_`, // Tên đặc biệt để nhận diện là học phần ảo
-            raw_text: " ", // Văn bản trống
+            title: `_Thư mục: ${folderName}_`, 
+            raw_text: " ", 
             folder_path: fullPath
           });
-          
           setCustomFolders([...customFolders, fullPath]);
           toast.success(`Đã tạo thư mục: ${folderName}`);
-          fetchSets(false, true); // Refresh dữ liệu từ server
+          fetchSets(false, true); 
         } catch (error) {
           toast.error("Lỗi khi tạo thư mục!");
         }
@@ -139,22 +148,16 @@ function VocabularyList() {
   };
 
   const handleDeleteFolder = async (e, folderName) => {
-    e.stopPropagation(); // Chặn sự kiện click để không bị mở thư mục
+    e.stopPropagation(); 
     const targetPath = currentPath ? `${currentPath}/${folderName}` : folderName;
 
     if (window.confirm(`Xóa thư mục "${folderName}" sẽ xóa TOÀN BỘ các học phần nằm bên trong. Bạn chắc chắn chứ?`)) {
       try {
-        // Tìm tất cả các học phần thuộc thư mục này (kể cả thư mục con và thư mục ảo)
         const setsToDelete = sets.filter(s => s.folder_path === targetPath || (s.folder_path && s.folder_path.startsWith(targetPath + '/')));
-
-        // Xóa toàn bộ học phần đó thông qua API
         await Promise.all(setsToDelete.map(s => api.delete(`/sets/${s.id}`)));
-
-        // Xóa khỏi danh sách thư mục ảo vừa tạo (nếu có)
         setCustomFolders(prev => prev.filter(p => p !== targetPath && !p.startsWith(targetPath + '/')));
-
         toast.success(`Đã xóa thư mục: ${folderName}`);
-        fetchSets(false, true); // Refresh dữ liệu
+        fetchSets(false, true);
       } catch (error) {
         toast.error("Có lỗi xảy ra khi xóa thư mục!");
       }
@@ -209,25 +212,57 @@ function VocabularyList() {
     catch (error) { toast.error("Lỗi cập nhật sao"); }
   };
 
-  const handleExportCSV = (e, set) => {
-    e.stopPropagation();
-    if (set.vocabularies.length === 0) return toast.warning("Học phần trống!");
-    let csvContent = "Word,Furigana,Meaning\n";
-    set.vocabularies.forEach(v => {
-      let word = v.word.replace(/"/g, '""');
-      let furigana = (v.furigana || "").replace(/"/g, '""');
-      let meaning = v.meaning.replace(/"/g, '""');
-      csvContent += `"${word}","${furigana}","${meaning}"\n`;
-    });
-    const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' }); 
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `${set.title}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    toast.success(`Đã xuất CSV: ${set.title}`);
+  // --- Các hàm xử lý Kéo và Thả ---
+  const handleDragStart = (e, id) => {
+    setTimeout(() => setDraggedSetId(id), 0);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDrag = (e) => {
+    const threshold = 120;
+    const speed = 25;
+
+    if (e.clientY === 0) return;
+
+    if (e.clientY < threshold) {
+      window.scrollBy(0, -speed);
+    } else if (window.innerHeight - e.clientY < threshold) {
+      window.scrollBy(0, speed);
+    }
+  };
+
+  const handleDragOver = (e, targetId) => {
+    e.preventDefault(); 
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverSetId !== targetId) setDragOverSetId(targetId);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = (e, targetId) => {
+    e.preventDefault();
+    setDragOverSetId(null);
+
+    if (!draggedSetId || draggedSetId === targetId) return;
+
+    const currentIds = displaySets.map(s => s.id);
+    const draggedIdx = currentIds.indexOf(draggedSetId);
+    const targetIdx = currentIds.indexOf(targetId);
+
+    const newOrderedIds = [...currentIds];
+    newOrderedIds.splice(draggedIdx, 1);
+    newOrderedIds.splice(targetIdx, 0, draggedSetId);
+
+    const mergedOrder = [...new Set([...newOrderedIds, ...customOrder])];
+    setCustomOrder(mergedOrder);
+    localStorage.setItem('scofieldSetOrder', JSON.stringify(mergedOrder));
+  };
+
+  const handleDragEnd = () => {
+    setDraggedSetId(null);
+    setDragOverSetId(null);
   };
 
   if (loading) return <LoadingSkeleton />;
@@ -235,7 +270,6 @@ function VocabularyList() {
   return (
     <div className="container-fluid mt-4 mx-auto" style={{ maxWidth: '1000px' }}>
       
-      {/* Form Tạo Học Phần (Nhận context của thư mục hiện tại để set mặc định) */}
       <AddVocabularyForm 
         onAddSuccess={() => fetchSets(false, true)} 
         existingFolders={allExistingFolders} 
@@ -289,7 +323,7 @@ function VocabularyList() {
         </div>
       </div>
 
-      {/* THANH ĐIỀU HƯỚNG THƯ MỤC KÈM NÚT TẠO (BREADCRUMB) */}
+      {/* THANH ĐIỀU HƯỚNG THƯ MỤC */}
       {!isSearching && (
         <div className="d-flex justify-content-between align-items-center mb-4 bg-white px-4 py-3 rounded-pill shadow-sm fade-in-slide">
           <div className="d-flex align-items-center flex-wrap gap-2">
@@ -310,7 +344,6 @@ function VocabularyList() {
             })}
           </div>
           
-          {/* NÚT TẠO THƯ MỤC NẰM Ở ĐÂY */}
           <button className="btn btn-outline-primary btn-sm rounded-pill fw-bold px-3 d-flex align-items-center gap-2 transition-all hover-bg-light" onClick={handleCreateFolder}>
             <span className="fs-6">📁</span> <span className="d-none d-sm-block">Thư mục mới</span>
           </button>
@@ -335,7 +368,6 @@ function VocabularyList() {
                     </h6>
                   </div>
                   
-                  {/* Nút Xóa Thư Mục */}
                   <button 
                     className="btn btn-sm btn-light text-danger rounded-circle border-0 d-flex align-items-center justify-content-center shadow-sm ms-2 transition-all hover-bg-danger hover-text-white"
                     style={{ width: '32px', height: '32px', flexShrink: 0 }}
@@ -356,23 +388,48 @@ function VocabularyList() {
         </div>
       )}
 
-      {/* DANH SÁCH HỌC PHẦN */}
+      {/* DANH SÁCH HỌC PHẦN CÓ KÉO THẢ */}
       {sets.length === 0 ? (
         <EmptyState title="Thư viện trống" message="Chưa có học phần nào. Hãy tạo mới ở phần trên nhé!" />
       ) : displaySets.length === 0 && displayFolders.length === 0 ? (
         <div className="text-center text-muted mt-5 fw-bold fs-5">Khu vực này hiện đang trống.</div>
       ) : (
         <div className={viewMode === 'grid' ? 'row g-4' : ''}>
-          {displaySets.map((vocabSet) => (
-            <div key={vocabSet.id} className={viewMode === 'grid' ? 'col-md-6 col-xl-4' : 'mb-4'}>
-              <div className="card shadow-sm border-0 rounded-4 h-100">
+          {displaySets.map((vocabSet) => {
+            const isDragged = draggedSetId === vocabSet.id;
+            const isDragOver = dragOverSetId === vocabSet.id && !isDragged;
+
+            return (
+            <div 
+              key={vocabSet.id} 
+              className={viewMode === 'grid' ? 'col-md-6 col-xl-4' : 'mb-4'}
+              draggable
+              onDragStart={(e) => handleDragStart(e, vocabSet.id)}
+              onDrag={handleDrag}
+              onDragOver={(e) => handleDragOver(e, vocabSet.id)}
+              onDragLeave={handleDragLeave}
+              onDrop={(e) => handleDrop(e, vocabSet.id)}
+              onDragEnd={handleDragEnd}
+            >
+              <div 
+                className="card border-0 rounded-4 h-100 transition-all bg-white"
+                style={{ 
+                  opacity: isDragged ? 0.4 : 1, 
+                  transform: isDragged ? 'scale(0.96)' : isDragOver ? 'scale(1.02)' : 'scale(1)',
+                  boxShadow: isDragOver ? '0 12px 24px rgba(134,59,255,0.2)' : '0 4px 12px rgba(0,0,0,0.04)',
+                  border: isDragOver ? '2px dashed var(--bs-primary)' : '2px solid transparent',
+                  zIndex: isDragOver ? 10 : 1
+                }}
+              >
                 <div 
-                  className={`card-header bg-white p-4 border-0 rounded-4 d-flex ${viewMode === 'grid' ? 'flex-column align-items-start gap-3' : 'justify-content-between align-items-center'}`}
-                  style={{ cursor: 'pointer' }}
+                  className={`card-header bg-transparent p-4 border-0 rounded-4 d-flex ${viewMode === 'grid' ? 'flex-column align-items-start gap-3' : 'justify-content-between align-items-center'}`}
+                  style={{ cursor: isDragged ? 'grabbing' : 'grab' }}
                   onClick={() => toggleSet(vocabSet.id)}
                 >
                   <div className={viewMode === 'grid' ? 'w-100' : ''}>
-                    <h5 className="mb-2 fw-bold text-dark text-truncate" title={vocabSet.title}>{vocabSet.title}</h5>
+                    <h5 className="mb-2 fw-bold text-dark text-truncate" title={vocabSet.title}>
+                      {vocabSet.title}
+                    </h5>
                     <span className="badge bg-light text-muted border px-2 py-1">{vocabSet.vocabularies.length} thuật ngữ</span>
                     
                     <div className={`mt-3 ${viewMode === 'list' ? 'd-none' : 'w-100'}`}>
@@ -399,7 +456,7 @@ function VocabularyList() {
                 </div>
 
                 {expandedSetId === vocabSet.id && viewMode === 'list' && (
-                  <div className="card-body p-0 border-top bg-light rounded-bottom-4 fade-in-slide">
+                  <div className="card-body p-0 border-top bg-light rounded-bottom-4 fade-in-slide" style={{ cursor: 'default' }}>
                     <div className="list-group list-group-flush rounded-bottom-4">
                       
                       {vocabSet.vocabularies.length === 0 && addingToSetId !== vocabSet.id && (
@@ -483,7 +540,8 @@ function VocabularyList() {
                 )}
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

@@ -9,8 +9,8 @@ export const VocabProvider = ({ children }) => {
   const [loading, setLoading] = useState(false);
   
   const [page, setPage] = useState(0);
-  const [hasMore, setHasMore] = useState(true);
-  const LIMIT = 10;
+  const [hasMore, setHasMore] = useState(false); // Tắt nút xem thêm
+  const LIMIT = 1000; // Tải tối đa 1000 học phần trong 1 lần
   const [studyProgress, setStudyProgress] = useState(0);
 
   const [hasFetchedSets, setHasFetchedSets] = useState(false);
