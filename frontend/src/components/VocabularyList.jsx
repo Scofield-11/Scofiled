@@ -1,4 +1,4 @@
-import React, { useState, useContext } from 'react';
+import React, { useState, useContext, useEffect } from 'react';
 import api from '../api/axiosConfig';
 import AddVocabularyForm from './AddVocabularyForm';
 import { VocabContext } from '../context/VocabContext';
@@ -19,11 +19,19 @@ function VocabularyList() {
   const [dragOverSetId, setDragOverSetId] = useState(null);
   const [customOrder, setCustomOrder] = useState(() => JSON.parse(localStorage.getItem('scofieldSetOrder')) || []);
 
-  React.useEffect(() => { fetchSets(); }, [fetchSets]);
+  // Trạng thái cho bộ lọc (Lưu lại trạng thái lọc của người dùng vào bộ nhớ)
+  const [sortOption, setSortOption] = useState(() => {
+    const saved = localStorage.getItem('scofieldSortOption');
+    if (saved) return saved;
+    const order = JSON.parse(localStorage.getItem('scofieldSetOrder')) || [];
+    return order.length > 0 ? 'custom' : 'newest';
+  });
+
+  useEffect(() => { fetchSets(); }, [fetchSets]);
+  useEffect(() => { localStorage.setItem('scofieldSortOption', sortOption); }, [sortOption]);
   
   const [searchTerm, setSearchTerm] = useState('');
   const [showOnlyStarred, setShowOnlyStarred] = useState(false);
-  const [sortOption, setSortOption] = useState('newest'); 
 
   const highlightText = (text, highlight) => {
     if (!highlight || !text) return text;
@@ -86,25 +94,36 @@ function VocabularyList() {
     displaySets = currentLevelSets
       .filter(set => !set.title.startsWith('_Thư mục:')) 
       .map(set => {
-        let filteredVocabs = set.vocabularies;
+        let filteredVocabs = [...set.vocabularies];
         if (showOnlyStarred) filteredVocabs = filteredVocabs.filter(v => v.is_starred);
         
         if (sortOption === 'az') filteredVocabs.sort((a, b) => a.word.localeCompare(b.word));
         else if (sortOption === 'za') filteredVocabs.sort((a, b) => b.word.localeCompare(a.word));
+        else if (sortOption === 'oldest') filteredVocabs.sort((a, b) => a.id - b.id);
         else filteredVocabs.sort((a, b) => b.id - a.id);
 
         return { ...set, vocabularies: filteredVocabs, progress: calculateProgress(set.vocabularies) };
       });
   }
 
-  // Sắp xếp thứ tự học phần theo tùy chỉnh Kéo & Thả
+  // Sắp xếp thứ tự học phần theo tùy chọn hiện tại
   displaySets.sort((a, b) => {
-    const indexA = customOrder.indexOf(a.id);
-    const indexB = customOrder.indexOf(b.id);
-    if (indexA !== -1 && indexB !== -1) return indexA - indexB;
-    if (indexA !== -1) return -1;
-    if (indexB !== -1) return 1;
-    return b.id - a.id; 
+    if (sortOption === 'custom') {
+      const indexA = customOrder.indexOf(a.id);
+      const indexB = customOrder.indexOf(b.id);
+      if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+      if (indexA !== -1) return -1;
+      if (indexB !== -1) return 1;
+      return b.id - a.id; 
+    } else if (sortOption === 'oldest') {
+      return a.id - b.id; // Chiều 26, 27, 28, 29
+    } else if (sortOption === 'az') {
+      return a.title.localeCompare(b.title);
+    } else if (sortOption === 'za') {
+      return b.title.localeCompare(a.title);
+    } else {
+      return b.id - a.id; // Mới nhất: 29, 28, 27, 26
+    }
   });
 
   const [editingVocabId, setEditingVocabId] = useState(null);
@@ -212,23 +231,19 @@ function VocabularyList() {
     catch (error) { toast.error("Lỗi cập nhật sao"); }
   };
 
-  // --- Các hàm xử lý Kéo và Thả ---
+  // --- Nâng cấp hàm xử lý Kéo và Thả (Dùng e.dataTransfer chống rớt data) ---
   const handleDragStart = (e, id) => {
-    setTimeout(() => setDraggedSetId(id), 0);
     e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', id.toString());
+    setTimeout(() => setDraggedSetId(id), 0);
   };
 
   const handleDrag = (e) => {
     const threshold = 120;
     const speed = 25;
-
     if (e.clientY === 0) return;
-
-    if (e.clientY < threshold) {
-      window.scrollBy(0, -speed);
-    } else if (window.innerHeight - e.clientY < threshold) {
-      window.scrollBy(0, speed);
-    }
+    if (e.clientY < threshold) window.scrollBy(0, -speed);
+    else if (window.innerHeight - e.clientY < threshold) window.scrollBy(0, speed);
   };
 
   const handleDragOver = (e, targetId) => {
@@ -237,27 +252,41 @@ function VocabularyList() {
     if (dragOverSetId !== targetId) setDragOverSetId(targetId);
   };
 
-  const handleDragLeave = (e) => {
-    e.preventDefault();
-  };
+  const handleDragLeave = (e) => { e.preventDefault(); };
 
   const handleDrop = (e, targetId) => {
     e.preventDefault();
     setDragOverSetId(null);
-
-    if (!draggedSetId || draggedSetId === targetId) return;
+    
+    // Lấy data ID trực tiếp từ Event Browser để đảm bảo không bị thất thoát
+    const draggedIdStr = e.dataTransfer.getData('text/plain');
+    if (!draggedIdStr) {
+      setDraggedSetId(null);
+      return;
+    }
+    
+    const draggedId = parseInt(draggedIdStr, 10);
+    if (draggedId === targetId) {
+      setDraggedSetId(null);
+      return;
+    }
 
     const currentIds = displaySets.map(s => s.id);
-    const draggedIdx = currentIds.indexOf(draggedSetId);
+    const draggedIdx = currentIds.indexOf(draggedId);
     const targetIdx = currentIds.indexOf(targetId);
 
-    const newOrderedIds = [...currentIds];
-    newOrderedIds.splice(draggedIdx, 1);
-    newOrderedIds.splice(targetIdx, 0, draggedSetId);
+    if (draggedIdx !== -1 && targetIdx !== -1) {
+      const newOrderedIds = [...currentIds];
+      newOrderedIds.splice(draggedIdx, 1);
+      newOrderedIds.splice(targetIdx, 0, draggedId);
 
-    const mergedOrder = [...new Set([...newOrderedIds, ...customOrder])];
-    setCustomOrder(mergedOrder);
-    localStorage.setItem('scofieldSetOrder', JSON.stringify(mergedOrder));
+      const mergedOrder = [...new Set([...newOrderedIds, ...customOrder])];
+      setCustomOrder(mergedOrder);
+      localStorage.setItem('scofieldSetOrder', JSON.stringify(mergedOrder));
+      setSortOption('custom'); // Tự động khóa về chế độ "Tùy chỉnh" khi người dùng kéo thả
+    }
+    
+    setDraggedSetId(null);
   };
 
   const handleDragEnd = () => {
@@ -294,7 +323,9 @@ function VocabularyList() {
             value={sortOption} onChange={(e) => setSortOption(e.target.value)}
             style={{ height: '54px', minWidth: '160px', cursor: 'pointer' }}
           >
+            <option value="custom" disabled={customOrder.length === 0}>Tùy chỉnh (Kéo thả)</option>
             <option value="newest">Mới nhất</option>
+            <option value="oldest">Cũ nhất (1 - 9)</option>
             <option value="az">A - Z</option>
             <option value="za">Z - A</option>
           </select>
