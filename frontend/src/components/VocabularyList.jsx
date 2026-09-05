@@ -6,6 +6,7 @@ import { VocabContext } from '../context/VocabContext';
 import { toast } from 'react-toastify';
 import LoadingSkeleton from './LoadingSkeleton';
 import EmptyState from './EmptyState';
+import { motion } from 'framer-motion';
 
 function VocabularyList() {
   const { sets, loading, fetchSets, hasMore } = useContext(VocabContext);
@@ -30,7 +31,20 @@ function VocabularyList() {
   useEffect(() => { localStorage.setItem('scofieldSortOption', sortOption); }, [sortOption]);
   
   const [searchTerm, setSearchTerm] = useState('');
-  const [noteModalVocab, setNoteModalVocab] = useState(null); // State mở Note Modal
+  const [noteModalVocab, setNoteModalVocab] = useState(null);
+
+  // --- CẤU HÌNH HIỆU ỨNG MOTION ---
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    show: {
+      opacity: 1,
+      transition: { staggerChildren: 0.05 }
+    }
+  };
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    show: { opacity: 1, y: 0, transition: { duration: 0.3 } }
+  };
 
   const highlightText = (text, highlight) => {
     if (!highlight || !text) return text;
@@ -88,7 +102,6 @@ function VocabularyList() {
       .filter(set => !set.title.startsWith('_Thư mục:')) 
       .map(set => {
         let filteredVocabs = [...set.vocabularies];
-        
         if (sortOption === 'az') filteredVocabs.sort((a, b) => a.word.localeCompare(b.word));
         else if (sortOption === 'za') filteredVocabs.sort((a, b) => b.word.localeCompare(a.word));
         else if (sortOption === 'oldest') filteredVocabs.sort((a, b) => a.id - b.id);
@@ -355,7 +368,7 @@ function VocabularyList() {
           {displayFolders.map(folderName => (
             <div key={folderName} className="col-6 col-md-4 col-lg-3">
               <div 
-                className="card shadow-sm border-0 rounded-4 h-100 bg-white transition-all hover-bg-light" 
+                className="card shadow-sm border-0 rounded-4 h-100 bg-white transition-all hover-scale" 
                 style={{cursor: 'pointer'}}
                 onClick={() => setCurrentPath(currentPath ? `${currentPath}/${folderName}` : folderName)}
               >
@@ -364,7 +377,6 @@ function VocabularyList() {
                     <span className="fs-3">📁</span>
                     <h6 className="fw-bold mb-0 text-dark text-truncate" title={folderName}>{folderName}</h6>
                   </div>
-                  
                   <button 
                     className="btn btn-sm btn-light text-danger rounded-circle border-0 d-flex align-items-center justify-content-center shadow-sm ms-2 transition-all hover-bg-danger hover-text-white"
                     style={{ width: '32px', height: '32px', flexShrink: 0 }}
@@ -385,24 +397,25 @@ function VocabularyList() {
         </div>
       )}
 
-      {/* DANH SÁCH HỌC PHẦN CÓ KÉO THẢ */}
+      {/* DANH SÁCH HỌC PHẦN ĐƯỢC BỌC MOTION ĐỂ TẠO HIỆU ỨNG LƯỚT LÊN TUẦN TỰ */}
       {sets.length === 0 ? (
         <EmptyState title="Thư viện trống" message="Chưa có học phần nào. Hãy tạo mới ở phần trên nhé!" />
       ) : displaySets.length === 0 && displayFolders.length === 0 ? (
         <div className="text-center text-muted mt-5 fw-bold fs-5">Khu vực này hiện đang trống.</div>
       ) : (
-        <div className={viewMode === 'grid' ? 'row g-4' : ''}>
+        <motion.div variants={containerVariants} initial="hidden" animate="show" className={viewMode === 'grid' ? 'row g-4' : ''}>
           {displaySets.map((vocabSet) => {
             const isDragged = draggedSetId === vocabSet.id;
             const isDragOver = dragOverSetId === vocabSet.id && !isDragged;
 
             return (
-            <div 
+            <motion.div 
+              variants={itemVariants}
               key={vocabSet.id} 
               className={viewMode === 'grid' ? 'col-md-6 col-xl-4' : 'mb-4'}
               draggable
               onDragStart={(e) => handleDragStart(e, vocabSet.id)}
-              onDrag={handleDrag}
+              onDrag={(e) => handleDrag(e)}
               onDragOver={(e) => handleDragOver(e, vocabSet.id)}
               onDragLeave={handleDragLeave}
               onDrop={(e) => handleDrop(e, vocabSet.id)}
@@ -537,10 +550,10 @@ function VocabularyList() {
                   </div>
                 )}
               </div>
-            </div>
+            </motion.div>
             );
           })}
-        </div>
+        </motion.div>
       )}
 
       {hasMore && sets.length > 0 && !searchTerm && (

@@ -336,3 +336,40 @@ body {
 .hover-text-white:hover { color: #ffffff !important; }
 
 
+/* --- PHẢN HỒI CHẠM (RIPPLE/SCALE) --- */
+.btn {
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease !important;
+}
+.btn:active {
+  transform: scale(0.96) !important;
+}
+
+/* --- THANH TIẾN ĐỘ SỐNG ĐỘNG (GLOWING PROGRESS BAR) --- */
+.progress-bar {
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  position: relative;
+  overflow: hidden;
+}
+.progress-bar::after {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; bottom: 0; right: 0;
+  background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.4) 50%, rgba(255,255,255,0) 100%);
+  animation: progressGlow 2s infinite linear;
+}
+@keyframes progressGlow {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+/* --- LƯỚT SÁNG CHO LOADING SKELETON (SHIMMER) --- */
+.placeholder {
+  background: linear-gradient(90deg, #e2e4e8 25%, #f0f2f5 50%, #e2e4e8 75%) !important;
+  background-size: 200% 100% !important;
+  animation: shimmerLoading 1.5s infinite linear !important;
+  opacity: 1 !important;
+}
+@keyframes shimmerLoading {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
