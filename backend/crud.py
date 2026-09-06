@@ -1,4 +1,4 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
 import models
 import schemas
@@ -135,7 +135,7 @@ def create_set_with_vocabularies(db: Session, title: str, raw_text: str, folder_
 
 # Cập nhật các hàm lấy dữ liệu
 def get_all_sets(db: Session, skip: int = 0, limit: int = 100):
-    return db.query(models.Set).offset(skip).limit(limit).all()
+    return db.query(models.Set).options(joinedload(models.Set.vocabularies)).offset(skip).limit(limit).all()
 
 def get_all_vocabularies(db: Session, skip: int = 0, limit: int = 100):
     return db.query(models.Vocabulary).offset(skip).limit(limit).all()

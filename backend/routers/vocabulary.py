@@ -11,6 +11,11 @@ router = APIRouter(
     tags=["vocabularies"]
 )
 
+@router.get("/stats/global")
+def get_global_stats(db: Session = Depends(get_db)):
+    total = db.query(models.Vocabulary).count()
+    return {"total": total}
+
 # API Lấy danh sách tất cả học phần kèm từ vựng bên trong (Có phân trang)
 @router.get("/sets", response_model=list[schemas.SetOut])
 def get_all_sets(skip: int = 0, limit: int = 1000, db: Session = Depends(get_db)):
